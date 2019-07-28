@@ -12,24 +12,17 @@ use std::os::raw::c_void;
 use std::path::Path;
 use std::ffi::CStr;
 
-mod shader;
 use shader::Shader;
 
 use image;
 use image::GenericImage;
 
+use cgmath::{Matrix4, vec3,  Rad};
+use cgmath::prelude::*;
+
 // settings
 const SCR_WIDTH: u32 = 800;
 const SCR_HEIGHT: u32 = 600;
-
-/// Macro to get c strings from literals without runtime overhead
-/// Literal must not contain any interior nul bytes!
-macro_rules! c_str {
-    ($literal:expr) => {
-        CStr::from_bytes_with_nul_unchecked(concat!($literal, "\0").as_bytes())
-    }
-}
-
 
 #[allow(non_snake_case)]
 pub fn main() {
@@ -58,18 +51,18 @@ pub fn main() {
         // build and compile our shader program
         // ------------------------------------
         let ourShader = Shader::new(
-            "shaders/4.2.texture.vs",
-            "shaders/4.2.texture.fs");
+            "shaders/5.1.transform.vs",
+            "shaders/5.1.transform.fs");
 
         // set up vertex data (and buffer(s)) and configure vertex attributes
         // ------------------------------------------------------------------
         // HINT: type annotation is crucial since default for float literals is f64
-        let vertices: [f32; 32] = [
-            // positions       // colors        // texture coords
-            0.5,  0.5, 0.0,   1.0, 0.0, 0.0,   1.0, 1.0, // top right
-            0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   1.0, 0.0, // bottom right
-            -0.5, -0.5, 0.0,   0.0, 0.0, 1.0,   0.0, 0.0, // bottom left
-            -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0  // top left
+        let vertices: [f32; 20] = [
+            // positions       // texture coords
+            0.5,  0.5, 0.0,   1.0, 1.0, // top right
+            0.5, -0.5, 0.0,   1.0, 0.0, // bottom right
+            -0.5, -0.5, 0.0,   0.0, 0.0, // bottom left
+            -0.5,  0.5, 0.0,   0.0, 1.0  // top left
         ];
         let indices = [
             0, 1, 3,  // first Triangle
@@ -94,16 +87,13 @@ pub fn main() {
                        &indices[0] as *const i32 as *const c_void,
                        gl::STATIC_DRAW);
 
-        let stride = 8 * mem::size_of::<GLfloat>() as GLsizei;
+        let stride = 5 * mem::size_of::<GLfloat>() as GLsizei;
         // position attribute
         gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride, ptr::null());
         gl::EnableVertexAttribArray(0);
-        // color attribute
-        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, stride, (3 * mem::size_of::<GLfloat>()) as *const c_void);
-        gl::EnableVertexAttribArray(1);
         // texture coord attribute
-        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, stride, (6 * mem::size_of::<GLfloat>()) as *const c_void);
-        gl::EnableVertexAttribArray(2);
+        gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, (3 * mem::size_of::<GLfloat>()) as *const c_void);
+        gl::EnableVertexAttribArray(1);
 
         // load and create a texture
         // -------------------------
@@ -159,10 +149,8 @@ pub fn main() {
 
         // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
         // -------------------------------------------------------------------------------------------
-        ourShader.useProgram(); // don't forget to activate/use the shader before setting uniforms!
-        // either set it manually like so:
-        gl::Uniform1i(gl::GetUniformLocation(ourShader.ID, c_str!("texture1").as_ptr()), 0); // using c_str! macro to avoid runtime overhead
-        // or set it via the texture class
+        ourShader.useProgram();
+        ourShader.setInt(c_str!("texture1"), 0);
         ourShader.setInt(c_str!("texture2"), 1);
 
         (ourShader, VBO, VAO, EBO, texture1, texture2)
@@ -187,8 +175,17 @@ pub fn main() {
             gl::ActiveTexture(gl::TEXTURE1);
             gl::BindTexture(gl::TEXTURE_2D, texture2);
 
-            // render container
+            // create transformations
+            let mut transform: Matrix4<f32> = Matrix4::identity();
+            transform = transform * Matrix4::<f32>::from_translation(vec3(0.5, -0.5, 0.0));
+            transform = transform * Matrix4::<f32>::from_angle_z(Rad(glfw.get_time() as f32));
+
+            // get matrix's uniform location and set matrix
             ourShader.useProgram();
+            let transformLoc = gl::GetUniformLocation(ourShader.ID, c_str!("transform").as_ptr());
+            gl::UniformMatrix4fv(transformLoc, 1, gl::FALSE, transform.as_ptr());
+
+            // render container
             gl::BindVertexArray(VAO);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
