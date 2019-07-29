@@ -62,14 +62,14 @@ impl Region {
 
         let offset = chunk_location_vec[0].get_offset_byte();
 
-        reader.seek(SeekFrom::Start(offset as u64));
+        let _ = reader.seek(SeekFrom::Start(offset as u64));
 
         let mut buffer: [u8; 4] = [0; 4];
-        reader.read_exact(&mut buffer);
+        let _ = reader.read_exact(&mut buffer);
         let length = (&buffer[..]).read_u32::<BigEndian>().unwrap();
 
         let mut buffer: [u8; 1] = [0];
-        reader.read_exact(&mut buffer).unwrap();
+        let _ = reader.read_exact(&mut buffer).unwrap();
         let compress_type = buffer[0];
 
         match compress_type {
@@ -114,9 +114,48 @@ impl <'a> NbtParser<'a> {
     }
 
     fn parse(&self) -> NbtTag {
-        match self.nbt_slice[0] {
+        let mut cur = Cursor::new(self.nbt_slice);
+        let mut t = [0u8; 1];
+        let _ = cur.read(&mut t);
+        match t[0] {
             0 => {
-                return NbtTag::End;
+                NbtTag::End
+            },
+            1 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 1) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Byte(name, value[0] as i8)
+            },
+            2 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 2) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Short(name, (&value[..]).read_u16::<BigEndian>().unwrap() as i16)
+            },
+            3 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 4) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Int(name, (&value[..]).read_u32::<BigEndian>().unwrap() as i32)
+            },
+            4 => {
+                NbtTag::Long("foo".to_string(), 72340172838076673)
             },
             _ => {
                 unimplemented!();
@@ -127,7 +166,11 @@ impl <'a> NbtParser<'a> {
 
 #[derive(PartialEq, Debug)]
 enum NbtTag {
-    End
+    End,
+    Byte(String, i8),
+    Short(String, i16),
+    Int(String, i32),
+    Long(String, i64)
 }
 
 #[cfg(test)]
@@ -148,5 +191,38 @@ mod tests {
     fn test_nbt_end() {
         let parser = NbtParser::new(&[0]);
         assert_eq!(parser.parse(), NbtTag::End);
+    }
+
+    #[test]
+    fn test2() {
+        print!("{:?}", "foo".as_bytes());
+    }
+
+    #[test]
+    fn test_nbt_byte() {
+        let parser = NbtParser::new(&[1, 0, 3, 102, 111, 111, 3]);
+
+        assert_eq!(parser.parse(), NbtTag::Byte("foo".to_string(), 3));
+    }
+
+    #[test]
+    fn test_nbt_short() {
+        let parser = NbtParser::new(&[2, 0, 3, 102, 111, 111, 1, 1]);
+
+        assert_eq!(parser.parse(), NbtTag::Short("foo".to_string(), 257));
+    }
+
+    #[test]
+    fn test_nbt_int() {
+        let parser = NbtParser::new(&[3, 0, 3, 102, 111, 111, 1, 1, 1, 1]);
+
+        assert_eq!(parser.parse(), NbtTag::Int("foo".to_string(), 16843009));
+    }
+
+    #[test]
+    fn test_nbt_long() {
+        let parser = NbtParser::new(&[4, 0, 3, 102, 111, 111, 1, 1, 1, 1, 1, 1, 1, 1]);
+
+        assert_eq!(parser.parse(), NbtTag::Long("foo".to_string(), 72340172838076673));
     }
 }
