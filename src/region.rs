@@ -1,8 +1,9 @@
-use std::io::{BufReader, Read, Cursor, SeekFrom, Seek};
-use std::fs::File;
-use byteorder::{ReadBytesExt, BigEndian};
 use std::cmp::Ordering;
-use flate2::bufread::{GzDecoder, ZlibDecoder};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
+
+use byteorder::{BigEndian, ReadBytesExt};
+use flate2::bufread::ZlibDecoder;
 
 #[derive(Eq)]
 struct ChunkLocation {
@@ -78,11 +79,21 @@ impl Region {
             2 => {
                 println!("{}", length);
                 let vec = reader.bytes().take((length - 1) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                println!("{:?}", vec);
                 let mut d = ZlibDecoder::new(&vec[..]);
-                let mut s = String::new();
-                d.read_to_string(&mut s).unwrap();
-                println!("{}", s);
+
+                let mut flate_vec = Vec::new();
+                loop {
+                    let mut buffer: [u8; 1024] = [0; 1024];
+                    match d.read(&mut buffer).unwrap() {
+                        0 => break,
+                        n => {
+                            println!("{}", n);
+                            flate_vec.append(&mut buffer[0..n].to_vec());
+                        }
+                    }
+                }
+
+                println!("{}:{:?}", flate_vec.len(), flate_vec);
             },
             _ => {
                 panic!("unknown type");
@@ -93,12 +104,49 @@ impl Region {
     }
 }
 
+struct NbtParser<'a> {
+    nbt_slice: &'a[u8]
+}
+
+impl <'a> NbtParser<'a> {
+    fn new(nbt_slice: &[u8]) -> NbtParser {
+        NbtParser {nbt_slice}
+    }
+
+    fn parse(&self) -> NbtTag {
+        match self.nbt_slice[0] {
+            0 => {
+                return NbtTag::End;
+            },
+            _ => {
+                unimplemented!();
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+enum NbtTag {
+    End
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::region::Region;
+    use crate::region::{NbtParser, Region, NbtTag};
 
     #[test]
     fn test() {
         Region::load_mca();
+    }
+
+    #[test]
+    fn test_nbt_parser() {
+        NbtParser::new(&[0]);
+    }
+
+    #[test]
+    fn test_nbt_end() {
+        let parser = NbtParser::new(&[0]);
+        assert_eq!(parser.parse(), NbtTag::End);
     }
 }
