@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, ByteOrder};
 use flate2::bufread::ZlibDecoder;
 
 #[derive(Eq)]
@@ -155,8 +155,136 @@ impl <'a> NbtParser<'a> {
                 NbtTag::Int(name, (&value[..]).read_u32::<BigEndian>().unwrap() as i32)
             },
             4 => {
-                NbtTag::Long("foo".to_string(), 72340172838076673)
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 8) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Long(name, (&value[..]).read_u64::<BigEndian>().unwrap() as i64)
             },
+            5 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 4) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Float(name, (&value[..]).read_f32::<BigEndian>().unwrap())
+            },
+            6 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 8) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = vec.split_off(name_byte_num as usize);
+                let name = String::from_utf8(vec).unwrap();
+
+                NbtTag::Double(name, (&value[..]).read_f64::<BigEndian>().unwrap())
+            },
+            7 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let before_position = cur.position();
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 4) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let array_num = vec.split_off(name_byte_num as usize);
+                let array_num = (&array_num[..]).read_u32::<BigEndian>().unwrap();
+                let name = String::from_utf8(vec).unwrap();
+
+                cur = Cursor::new(self.nbt_slice);
+                cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64 + 4));
+
+                let array = cur.bytes().take((array_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+
+                NbtTag::ByteArray(name, array)
+
+            },
+            8 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let before_position = cur.position();
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num + 2) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value_num = vec.split_off(name_byte_num as usize);
+                let value_num = (&value_num[..]).read_u16::<BigEndian>().unwrap();
+                let name = String::from_utf8(vec).unwrap();
+
+                cur = Cursor::new(self.nbt_slice);
+                cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64 + 2));
+
+                let array = cur.bytes().take((value_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = String::from_utf8(array).unwrap();
+
+                NbtTag::String(name, value)
+            },
+            9 => {
+                let mut name_byte_num_buffer = [0u8; 2];
+                let before_position = cur.position();
+                let _ = cur.read(&mut name_byte_num_buffer);
+
+                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
+                let mut vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let name = String::from_utf8(vec).unwrap();
+
+                cur = Cursor::new(self.nbt_slice);
+                cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64));
+
+                let tag_type = cur.read_u8().unwrap();
+                let item_num = cur.read_u32::<BigEndian>().unwrap();
+                match tag_type {
+                    1 => {
+                        let mut item_vec = Vec::new();
+                        for i in 0..item_num {
+                            let item = cur.read_u8().unwrap();
+                            item_vec.push(NbtTag::Byte("".to_string(), item as i8));
+                        }
+                        NbtTag::List(name, item_vec)
+                    },
+                    2 => {
+                        let mut item_vec = Vec::new();
+                        for i in 0..item_num {
+                            let item = cur.read_u16::<BigEndian>().unwrap();
+                            item_vec.push(NbtTag::Short("".to_string(), item as i16));
+                        }
+                        NbtTag::List(name, item_vec)
+                    },
+                    3 => {
+                        let mut item_vec = Vec::new();
+                        for i in 0..item_num {
+                            let item = cur.read_u32::<BigEndian>().unwrap();
+                            item_vec.push(NbtTag::Int("".to_string(), item as i32));
+                        }
+                        NbtTag::List(name, item_vec)
+                    },
+                    4 => {
+                        let mut item_vec = Vec::new();
+                        for i in 0..item_num {
+                            let item = cur.read_u64::<BigEndian>().unwrap();
+                            item_vec.push(NbtTag::Long("".to_string(), item as i64));
+                        }
+                        NbtTag::List(name, item_vec)
+                    },
+                    5 => {
+                        let mut item_vec = Vec::new();
+                        for i in 0..item_num {
+                            let item = cur.read_f32::<BigEndian>().unwrap();
+                            item_vec.push(NbtTag::Float("".to_string(), item));
+                        }
+                        NbtTag::List(name, item_vec)
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
+            }
             _ => {
                 unimplemented!();
             }
@@ -170,12 +298,17 @@ enum NbtTag {
     Byte(String, i8),
     Short(String, i16),
     Int(String, i32),
-    Long(String, i64)
+    Long(String, i64),
+    Float(String, f32),
+    Double(String, f64),
+    ByteArray(String, Vec<u8>),
+    String(String, String),
+    List(String, Vec<NbtTag>)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::region::{NbtParser, Region, NbtTag};
+    use super::{NbtParser, Region, NbtTag};
 
     #[test]
     fn test() {
@@ -225,4 +358,91 @@ mod tests {
 
         assert_eq!(parser.parse(), NbtTag::Long("foo".to_string(), 72340172838076673));
     }
+
+    #[test]
+    fn test_float() {
+        println!("{}", 1.0f32.to_bits());
+    }
+
+    #[test]
+    fn test_nbt_float() {
+        let parser = NbtParser::new(&[5, 0, 3, 102, 111, 111, 63, 128, 0, 0]);
+
+        assert_eq!(parser.parse(), NbtTag::Float("foo".to_string(), 1f32));
+    }
+
+    #[test]
+    fn test_double() {
+        println!("{}", 1.0f64.to_bits());
+    }
+
+    #[test]
+    fn test_nbt_double() {
+        let parser = NbtParser::new(&[6, 0, 3, 102, 111, 111, 63, 240, 0, 0, 0, 0, 0, 0]);
+
+        assert_eq!(parser.parse(), NbtTag::Double("foo".to_string(), 1f64));
+    }
+
+    #[test]
+    fn test_nbt_byte_array() {
+        let parser = NbtParser::new(&[7, 0, 3, 102, 111, 111, 0, 0, 0, 3, 1, 2, 3]);
+
+        assert_eq!(parser.parse(), NbtTag::ByteArray("foo".to_string(), vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn test_nbt_string() {
+        let parser = NbtParser::new(&[8, 0, 3, 102, 111, 111, 0, 6, 227, 129, 187, 227, 129, 146]);
+
+        assert_eq!(parser.parse(), NbtTag::String("foo".to_string(), "ほげ".to_string()));
+    }
+
+
+    mod nbt_tag_list {
+        use super::super::{NbtParser, NbtTag};
+
+        #[test]
+        fn test_nbt_list_byte() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 1, 0, 0, 0, 2, 1, 2]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Byte("".to_string(), 1), NbtTag::Byte("".to_string(), 2)]));
+        }
+
+        #[test]
+        fn test_nbt_list_short() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 2, 0, 0, 0, 2, 0, 1, 0, 2]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Short("".to_string(), 1), NbtTag::Short("".to_string(), 2)]));
+        }
+
+        #[test]
+        fn test_nbt_list_int() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 3, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Int("".to_string(), 1), NbtTag::Int("".to_string(), 2)]));
+        }
+
+        #[test]
+        fn test_nbt_list_long() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 4, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Long("".to_string(), 1), NbtTag::Long("".to_string(), 2)]));
+        }
+
+        #[test]
+        fn test_nbt_list_float() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 5, 0, 0, 0, 2, 63, 128, 0, 0, 63, 128, 0, 0]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Float("".to_string(), 1f32), NbtTag::Float("".to_string(), 1f32)]));
+        }
+
+        #[test]
+        fn test_nbt_list_double() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 6, 0, 0, 0, 2, 63, 240, 0, 0, 0, 0, 0, 0, 63, 240, 0, 0, 0, 0, 0, 0]);
+
+            assert_eq!(parser.parse(), NbtTag::List("foo".to_string(), vec![NbtTag::Double("".to_string(), 1f64), NbtTag::Double("".to_string(), 1f64)]));
+        }
+
+    }
+
 }
