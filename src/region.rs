@@ -540,10 +540,42 @@ mod tests {
         }
 
         #[test]
-        fn test_two_nbt_byte_in_cmpound() {
+        fn test_two_nbt_byte_in_compound() {
             let parser = NbtParser::new(&[10, 0, 3, 102, 111, 111, 1, 0, 3, 102, 111, 111, 3, 1, 0, 3, 102, 111, 111, 3, 0]);
 
-            assert_eq!(parser.parse(), (NbtTag::Compound("foo".to_string(), vec![NbtTag::Byte("foo".to_string(), 3), NbtTag::Byte("foo".to_string(), 3)]), 21))
+            assert_eq!(parser.parse(), (NbtTag::Compound("foo".to_string(), vec![NbtTag::Byte("foo".to_string(), 3), NbtTag::Byte("foo".to_string(), 3)]), 21));
+        }
+
+        #[test]
+        fn test_nbt_short_in_compound() {
+            let parser = NbtParser::new(&[10, 0, 3, 102, 111, 111, 2, 0, 3, 102, 111, 111, 0, 3, 0]);
+
+            assert_eq!(parser.parse(), (NbtTag::Compound("foo".to_string(), vec![NbtTag::Short("foo".to_string(), 3)]), 15));
+        }
+
+        #[test]
+        fn test_two_nbt_short_in_compound() {
+            let parser = NbtParser::new(&[10, 0, 3, 102, 111, 111, 2, 0, 3, 102, 111, 111, 0, 3, 2, 0, 3, 102, 111, 111, 0, 3, 0]);
+
+            assert_eq!(parser.parse(),
+                       (NbtTag::Compound("foo".to_string(), vec![NbtTag::Short("foo".to_string(), 3),
+                                                                 NbtTag::Short("foo".to_string(), 3)]), 23));
+        }
+
+        #[test]
+        fn test_nbt_int_in_compound() {
+            let parser = NbtParser::new(&[10, 0, 3, 102, 111, 111, 3, 0, 3, 102, 111, 111, 0, 0, 0, 3, 0]);
+
+            assert_eq!(parser.parse(),
+                       (NbtTag::Compound("foo".to_string(), vec![NbtTag::Int("foo".to_string(), 3)]), 17));
+        }
+
+        #[test]
+        fn test_nbt_two_int_in_compound() {
+            let parser = NbtParser::new(&[10, 0, 3, 102, 111, 111, 3, 0, 3, 102, 111, 111, 0, 0, 0, 3, 3, 0, 3, 102, 111, 111, 0, 0, 0, 3, 0]);
+
+            assert_eq!(parser.parse(),
+                       (NbtTag::Compound("foo".to_string(), vec![NbtTag::Int("foo".to_string(), 3), NbtTag::Int("foo".to_string(), 3)]), 27));
         }
 
         // TODO 他パターンのテストケースの作成
