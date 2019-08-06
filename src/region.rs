@@ -94,6 +94,10 @@ impl Region {
                 }
 
                 println!("{}:{:?}", flate_vec.len(), flate_vec);
+                let parser = NbtParser::new(&flate_vec[..]);
+                let nbt_tag = parser.parse();
+
+                println!("{:?}", nbt_tag);
             },
             _ => {
                 panic!("unknown type");
@@ -301,7 +305,8 @@ impl <'a> NbtParser<'a> {
                     },
 
                     // TODO 9, 10, 11のパターンの作成
-                    _ => {
+                    n => {
+                        println!("{}", n);
                         unimplemented!()
                     }
                 }
@@ -336,10 +341,32 @@ impl <'a> NbtParser<'a> {
                     item_length += length as u16;
                     nbt_tag_vec.push(tag);
                 }
+
+                (NbtTag::Compound(name, nbt_tag_vec), item_length as usize)
             },
-            // TODO 11のパターンの作成
+            11 => {
+                let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
+
+                let position = cur.position();
+                let name_vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let name = String::from_utf8(name_vec).unwrap();
+
+                cur = Cursor::new(self.nbt_slice);
+                cur.seek(SeekFrom::Start(position + name_byte_num as u64));
+
+                let item_num = cur.read_u32::<BigEndian>().unwrap();
+
+                let mut vec = Vec::new();
+                for _ in 0..item_num {
+                    let item = cur.read_u32::<BigEndian>().unwrap();
+                    vec.push(item as i32)
+                }
+
+                (NbtTag::IntArray(name, vec), 1 + 2 + name_byte_num as usize + 4 + (4 * item_num) as usize)
+            },
+
             _ => {
-                unimplemented!();
+                panic!()
             }
         }
     }
@@ -357,7 +384,8 @@ enum NbtTag {
     ByteArray(String, Vec<u8>),
     String(String, String),
     List(String, Vec<NbtTag>),
-    Compound(String, Vec<NbtTag>)
+    Compound(String, Vec<NbtTag>),
+    IntArray(String, Vec<i32>)
 }
 
 #[cfg(test)]
@@ -579,5 +607,14 @@ mod tests {
         }
 
         // TODO 他パターンのテストケースの作成
+    }
+
+
+    #[test]
+    fn test_nbt_int_array() {
+        let parser = NbtParser::new(&[11, 0, 3, 102, 111, 111, 0, 0, 0, 2, 0, 0 ,0, 1, 0, 0, 0, 1]);
+
+        assert_eq!(parser.parse(),
+                   (NbtTag::IntArray("foo".to_string(), vec![1, 1]), 18));
     }
 }
