@@ -190,137 +190,36 @@ impl <'a> NbtParser<'a> {
                 (tag, 1 + 2 + name_byte_num as usize + value_size)
             },
             7 => {
-                let mut name_byte_num_buffer = [0u8; 2];
-                let before_position = cur.position();
-                let _ = cur.read(&mut name_byte_num_buffer);
-
-                let name_byte_num = (&name_byte_num_buffer[..]).read_u16::<BigEndian>().unwrap();
-                let mut vec = cur.bytes().take((name_byte_num + 4) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                let array_num = vec.split_off(name_byte_num as usize);
-                let array_num = (&array_num[..]).read_u32::<BigEndian>().unwrap();
-                let name = String::from_utf8(vec).unwrap();
-
-                cur = Cursor::new(self.nbt_slice);
-                let _ = cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64 + 4));
-
-                let array = cur.bytes().take((array_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-
-                (NbtTag::ByteArray(name, array), 1 + 2 + name_byte_num as usize + 4 + array_num as usize)
-
-            },
-            8 => {
-                let before_position = cur.position();
                 let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
 
-                let mut vec = cur.bytes().take((name_byte_num + 2) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                let value_num = vec.split_off(name_byte_num as usize);
-                let value_num = (&value_num[..]).read_u16::<BigEndian>().unwrap();
-                let name = String::from_utf8(vec).unwrap();
-
-                cur = Cursor::new(self.nbt_slice);
-                let _ = cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64 + 2));
-
-                let array = cur.bytes().take((value_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                let value = String::from_utf8(array).unwrap();
-
-                (NbtTag::String(name, value), 1 + 2 + name_byte_num as usize + 2 + value_num as usize)
-            },
-            9 => {
-                let before_position = cur.position();
-                let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
-
+                let position = cur.position();
                 let vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
                 let name = String::from_utf8(vec).unwrap();
 
-                cur = Cursor::new(self.nbt_slice);
-                let _ = cur.seek(SeekFrom::Start(before_position + 2 + name_byte_num as u64));
+                let (tag, value_size) = self.parse_value(name, 7, position + name_byte_num as u64);
+                (tag, 1 + 2 + name_byte_num as usize + value_size)
 
-                let tag_type = cur.read_u8().unwrap();
-                let item_num = cur.read_u32::<BigEndian>().unwrap();
-                match tag_type {
-                    1 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_u8().unwrap();
-                            item_vec.push(NbtTag::Byte("".to_string(), item as i8));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + item_num as usize)
-                    },
-                    2 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_u16::<BigEndian>().unwrap();
-                            item_vec.push(NbtTag::Short("".to_string(), item as i16));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + (item_num * 2) as usize)
-                    },
-                    3 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_u32::<BigEndian>().unwrap();
-                            item_vec.push(NbtTag::Int("".to_string(), item as i32));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + (item_num * 4) as usize)
-                    },
-                    4 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_u64::<BigEndian>().unwrap();
-                            item_vec.push(NbtTag::Long("".to_string(), item as i64));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + (item_num * 8) as usize)
-                    },
-                    5 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_f32::<BigEndian>().unwrap();
-                            item_vec.push(NbtTag::Float("".to_string(), item));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + (item_num * 4) as usize)
-                    },
-                    6 => {
-                        let mut item_vec = Vec::new();
-                        for _ in 0..item_num {
-                            let item = cur.read_f64::<BigEndian>().unwrap();
-                            item_vec.push(NbtTag::Double("".to_string(), item));
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + (item_num * 8) as usize)
-                    },
-                    7 => {
-                        let mut item_vec = Vec::new();
-                        let mut item_length = 0;
-                        for _ in 0..item_num {
-                            let item_num = cur.read_u32::<BigEndian>().unwrap();
-                            let position = cur.position();
-                            let vec = cur.bytes().take(item_num as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                            item_vec.push(NbtTag::ByteArray("".to_string(), vec));
-                            cur = Cursor::new(self.nbt_slice);
-                            let _ = cur.seek(SeekFrom::Start(position + item_num as u64));
-                            item_length = item_length + 4 + item_num;
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + item_length as usize)
-                    },
-                    8 => {
-                        let mut item_vec = Vec::new();
-                        let mut item_length = 0;
-                        for _ in 0..item_num {
-                            let length = cur.read_u16::<BigEndian>().unwrap();
-                            let position = cur.position();
-                            let vec = cur.bytes().take(length as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
-                            item_vec.push(NbtTag::String("".to_string(), String::from_utf8(vec).unwrap()));
-                            cur = Cursor::new(self.nbt_slice);
-                            let _ = cur.seek(SeekFrom::Start(position + length as u64));
-                            item_length = item_length + 2 + length;
-                        }
-                        (NbtTag::List(name, item_vec), 1 + 2 + name_byte_num as usize + 1 + 4 + item_length as usize)
-                    },
+            },
+            8 => {
+                let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
 
-                    // TODO 9, 10, 11のパターンの作成
-                    n => {
-                        println!("{}", n);
-                        unimplemented!()
-                    }
-                }
+                let position = cur.position();
+                let vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let name = String::from_utf8(vec).unwrap();
+
+                let (tag, value_size) = self.parse_value(name, 8, position + name_byte_num as u64);
+                (tag, 1 + 2 + name_byte_num as usize + value_size)
+
+            },
+            9 => {
+                let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
+
+                let position = cur.position();
+                let vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let name = String::from_utf8(vec).unwrap();
+
+                let (tag, value_size) = self.parse_value(name, 9, position + name_byte_num as u64);
+                (tag, 1 + 2 + name_byte_num as usize + value_size)
             },
             10 => {
                 let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
@@ -406,6 +305,53 @@ impl <'a> NbtParser<'a> {
             5 => {
                 let value = cur.read_f32::<BigEndian>().unwrap();
                 (NbtTag::Float(name, value), 4)
+            }
+            6 => {
+                let value = cur.read_f64::<BigEndian>().unwrap();
+                (NbtTag::Double(name, value), 8)
+            }
+            7 => {
+
+                let array_num = cur.read_u32::<BigEndian>().unwrap();
+
+                let array = cur.bytes().take((array_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+
+                (NbtTag::ByteArray(name, array), 4 + array_num as usize)
+
+            }
+            8 => {
+                let value_num = cur.read_u16::<BigEndian>().unwrap();
+                let array = cur.bytes().take((value_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
+                let value = String::from_utf8(array).unwrap();
+
+                (NbtTag::String(name, value), 2 + value_num as usize)
+
+            }
+            9 => {
+                let tag_type = cur.read_u8().unwrap();
+                let item_num = cur.read_u32::<BigEndian>().unwrap();
+                match tag_type {
+                    n @ 1...8 => {
+                        let mut item_vec = Vec::new();
+                        let mut item_length = 0;
+                        for _ in 0..item_num {
+                            let position = cur.position();
+
+                            let (tag, size) = self.parse_value("".to_string(), n, position);
+                            item_vec.push(tag);
+
+                            let _ = cur.seek(SeekFrom::Start(position + size as u64));
+                            item_length += size;
+                        }
+                        (NbtTag::List(name, item_vec), 1 + 4 + item_length as usize)
+                    },
+
+                    // TODO 9, 10, 11のパターンの作成
+                    n => {
+                        println!("{}", n);
+                        unimplemented!()
+                    }
+                }
             }
             _ => {
                 unimplemented!()
