@@ -131,6 +131,7 @@ impl <'a> NbtParser<'a> {
                 let vec = cur.bytes().take((name_byte_num) as usize).map(|e| e.unwrap()).collect::<Vec<u8>>();
                 let name = String::from_utf8(vec).unwrap();
 
+                println!("{}: {}", n, name);
                 let (tag, value_size) = self.parse_value(name, n, position + name_byte_num as u64);
 
                 (tag, 1 + 2 + name_byte_num as usize + value_size)
@@ -193,7 +194,7 @@ impl <'a> NbtParser<'a> {
                 let tag_type = cur.read_u8().unwrap();
                 let item_num = cur.read_u32::<BigEndian>().unwrap();
                 match tag_type {
-                    n @ 1...8 => {
+                    n @ 1...11 => {
                         let mut item_vec = Vec::new();
                         let mut item_length = 0;
                         for _ in 0..item_num {
@@ -208,10 +209,9 @@ impl <'a> NbtParser<'a> {
                         (NbtTag::List(name, item_vec), 1 + 4 + item_length as usize)
                     },
 
-                    // TODO 9, 10, 11のパターンの作成
                     n => {
                         println!("{}", n);
-                        unimplemented!()
+                        panic!()
                     }
                 }
             }
@@ -437,6 +437,17 @@ mod tests {
                              vec![NbtTag::String("".to_string(), "ほげ".to_string()), NbtTag::String("".to_string(), "ほげ".to_string())])
                 , 27)
             );
+        }
+
+        #[test]
+        fn test_nbt_list_list_byte() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 9, 0, 0, 0, 2, 1, 0, 0, 0, 2, 1, 2, 1, 0, 0, 0, 2, 1, 2]);
+
+            assert_eq!(parser.parse(), (
+                NbtTag::List("foo".to_string(),
+                vec![NbtTag::List("".to_string(), vec![NbtTag::Byte("".to_string(), 1), NbtTag::Byte("".to_string(), 2)]),
+                     NbtTag::List("".to_string(), vec![NbtTag::Byte("".to_string(), 1), NbtTag::Byte("".to_string(), 2)])]
+                ), 25))
         }
 
     }
