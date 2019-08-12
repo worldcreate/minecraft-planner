@@ -194,6 +194,15 @@ impl <'a> NbtParser<'a> {
                 let tag_type = cur.read_u8().unwrap();
                 let item_num = cur.read_u32::<BigEndian>().unwrap();
                 match tag_type {
+                    0 => {
+                        let mut item_vec = Vec::new();
+                        for _ in 0..item_num {
+                            let tag = NbtTag::End;
+                            item_vec.push(tag);
+
+                        }
+                        (NbtTag::List(name, item_vec), 1 + 4 + item_num as usize)
+                    }
                     n @ 1...11 => {
                         let mut item_vec = Vec::new();
                         let mut item_length = 0;
@@ -373,6 +382,13 @@ mod tests {
 
     mod nbt_tag_list {
         use super::super::{NbtParser, NbtTag};
+
+        #[test]
+        fn test_nbt_list_end() {
+            let parser = NbtParser::new(&[9, 0, 3, 102, 111, 111, 0, 0, 0, 0, 2, 0, 0]);
+
+            assert_eq!(parser.parse(), (NbtTag::List("foo".to_string(), vec![NbtTag::End, NbtTag::End]), 13));
+        }
 
         #[test]
         fn test_nbt_list_byte() {
