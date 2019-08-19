@@ -98,6 +98,65 @@ impl Region {
                 let nbt_tag = parser.parse();
 
                 println!("{:?}", nbt_tag);
+
+                let (tag, _) = nbt_tag;
+
+                match tag {
+                    NbtTag::Compound(_, v) => {
+                        let nbt = v.iter().for_each(|e| {
+                            match e {
+                                NbtTag::Compound(name, v) => {
+                                    if name == "Level" {
+                                        v.iter().for_each(|e| {
+                                            match e {
+                                                NbtTag::List(name, v) => {
+                                                    if name == "Sections" {
+                                                        for v in v {
+                                                            v.print_name(0);
+                                                            match v {
+                                                                NbtTag::Compound(name, v) => {
+                                                                    for v in v {
+                                                                        if name == "" {
+                                                                            match v {
+                                                                                NbtTag::ByteArray(name, v) => {
+                                                                                    if name == "Blocks" {
+                                                                                        println!("blocks {:?}", v);
+                                                                                    }
+                                                                                }
+                                                                                _ => {
+                                                                                    println!("hogehoge");
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                    }
+
+                                                                }
+                                                                _ => {}
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                _ => {
+
+                                                }
+                                            }
+
+                                        })
+                                    }
+
+                                }
+                                _ => {
+                                    println!("fugafuga");
+                                }
+                            }
+                        });
+
+                    }
+                    _ => {
+
+                    }
+                };
             },
             _ => {
                 panic!("unknown type");
@@ -124,7 +183,7 @@ impl <'a> NbtParser<'a> {
             0 => {
                 (NbtTag::End, 1)
             }
-            n @ 1...11 => {
+            n @ 1..=11 => {
                 let name_byte_num = cur.read_u16::<BigEndian>().unwrap();
 
                 let position = cur.position();
@@ -203,7 +262,7 @@ impl <'a> NbtParser<'a> {
                         }
                         (NbtTag::List(name, item_vec), 1 + 4 + item_num as usize)
                     }
-                    n @ 1...11 => {
+                    n @ 1..=11 => {
                         let mut item_vec = Vec::new();
                         let mut item_length = 0;
                         for _ in 0..item_num {
@@ -286,6 +345,61 @@ enum NbtTag {
     Compound(String, Vec<NbtTag>),
     IntArray(String, Vec<i32>)
 }
+
+impl NbtTag {
+    fn print_name(&self, depth: i8) {
+        for _ in 0..depth {
+            print!("\t");
+        }
+        match self {
+            NbtTag::Byte(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::Short(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::Int(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::Long(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::Float(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::Double(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::ByteArray(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::String(name, _) => {
+                println!("\"{}\"", name);
+            }
+            NbtTag::List(name, v) => {
+                println!("\"{}\"", name);
+
+                for e in v {
+                    e.print_name(depth + 1);
+                }
+            }
+            NbtTag::Compound(name, v) => {
+                println!("\"{}\"", name);
+                for n in v {
+                    n.print_name(depth + 1);
+                }
+            }
+            NbtTag::IntArray(name, _) => {
+                println!("\"{}\"", name);
+            }
+            _ => {
+
+            }
+        }
+
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
